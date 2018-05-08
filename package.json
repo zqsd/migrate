@@ -1,0 +1,6 @@
+{
+    "name": "migrate",
+    "bin": {
+        "mocha": "./migrate.js"
+    }
+}
