@@ -3,5 +3,9 @@
     "version": "0.0.1",
     "bin": {
         "migrate": "./migrate.js"
+    },
+    "dependencies": {
+        "glob-promise": "^3.4.0",
+        "moment": "^2.22.1"
     }
 }
