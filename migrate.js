@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 const fs = require('fs');
-const db = require('./db');
 const path = require('path');
+const db = require(path.join(process.cwd(), 'db'));
 const glob = require('glob-promise');
 const moment = require('moment');
 
