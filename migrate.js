@@ -9,7 +9,7 @@ const moment = require('moment');
 async function tableExists(client, name) {
     const tables = await client.query('SHOW TABLES;');
     for(let row of tables.rows) {
-        if(row.Table === name)
+        if(row.table_name === name)
             return true;
     }
     return false;
@@ -30,6 +30,20 @@ async function getCurrentMigration() {
     return null;
 }
 
+async function runMigration(client, migrationName) {
+    console.log('inserting migration ' + migrationName);
+    const migration = require(path.join(process.cwd(), 'migrations', migrationName + '.js'));
+    try {
+        await migration.up(client);
+        await client.query('INSERT INTO migrations (name) VALUES ($1)', [migrationName]);
+    }
+    catch(e) {
+        console.error(e);
+        await migration.down(client);
+        throw e;
+    }
+}
+
 async function up(client) {
     const migrationFiles = await getMigrationFiles();
     const currentMigration = await getCurrentMigration();
@@ -47,18 +61,30 @@ async function up(client) {
     }
 
     if(migrationName) {
-        console.log('inserting migration ' + migrationName);
+        await runMigration(client, migrationName);
+    }
+}
 
-        const migration = require('./migrations/' + migrationName + '.js');
-        try {
-            await migration.up(client);
-            await client.query('INSERT INTO migrations (name) VALUES ($1)', [migrationName]);
+async function all(client) {
+    const migrationFiles = await getMigrationFiles();
+    const currentMigration = await getCurrentMigration();
+    let migrationName;
+    let startIndex = 0;
+
+    // find last done migration
+    if(currentMigration) {
+        let migrating = false;
+        for(startIndex = 0; startIndex < migrationFiles.length - 1; startIndex++) {
+            if(migrationFiles[startIndex] === currentMigration) {
+                startIndex++;
+                break;
+            }
         }
-        catch(e) {
-            await migration.down(client);
-            console.error(e);
-            throw e;
-        }
+    }
+
+    for(let i = startIndex; i < migrationFiles.length; i++) {
+        migrationName = migrationFiles[i];
+        await runMigration(client, migrationName);
     }
 }
 
@@ -68,7 +94,7 @@ async function down() {
     if(migrationName) {
         console.log('removing migration ' + migrationName);
 
-        const migration = require('./migrations/' + migrationName + '.js');
+        const migration = require(path.join(process.cwd(), 'migrations', migrationName + '.js'));
         try {
             await migration.down(client);
             await client.query('DELETE FROM migrations WHERE name = $1', [migrationName]);
@@ -84,7 +110,7 @@ async function down() {
 async function status() {
     let migrations = {};
 
-    for(let m of await glob('./migrations/*.js')) {
+    for(let m of await glob(path.join(process.cwd(), 'migrations', '*.js'))) {
         const name = path.basename(m, '.js');
         migrations[name] = {
             name: name,
@@ -133,7 +159,7 @@ exports.down = async (client) => {
 (async () => {
     client = await db.pool.connect();
     try {
-        if(!await tableExists(client, 'migrations')) {
+        if(!(await tableExists(client, 'migrations'))) {
             const r = await client.query(`CREATE TABLE migrations (
                 "id" UUID PRIMARY KEY NOT NULL DEFAULT gen_random_uuid(),
                 "name" TEXT NOT NULL UNIQUE
@@ -157,6 +183,10 @@ exports.down = async (client) => {
             }
             else if(process.argv[2] === 'down') {
                 await down(client);
+                await status(client);
+            }
+            else if(process.argv[2] === 'all') {
+                await all(client);
                 await status(client);
             }
             else {

@@ -5,6 +5,7 @@
         "migrate": "./migrate.js"
     },
     "dependencies": {
+        "glob": "^7.1.4",
         "glob-promise": "^3.4.0",
         "moment": "^2.22.1"
     }
